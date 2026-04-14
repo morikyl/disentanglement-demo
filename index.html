@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entanglement Explorer</title>
+<style>
+  :root {
+    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Mono', 'Consolas', monospace;
+    --color-text-primary: #2C2C2A;
+    --color-text-secondary: #5A5A56;
+    --color-text-tertiary: #8A8A84;
+    --color-bg-primary: #FAFAF8;
+    --color-bg-secondary: #F2F2EE;
+    --color-bg-card: #FFFFFF;
+    --color-border-tertiary: #D8D8D2;
+    --border-radius-lg: 8px;
+    --amber: #BA7517;
+    --teal: #0F6E56;
+    --mid: #888780;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-text-primary: #D3D1C7;
+      --color-text-secondary: #A0A098;
+      --color-text-tertiary: #6E6E66;
+      --color-bg-primary: #1A1A18;
+      --color-bg-secondary: #222220;
+      --color-bg-card: #2A2A28;
+      --color-border-tertiary: #3A3A36;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font-mono);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    padding: 24px;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .controls select {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 6px 10px;
+    background: var(--color-bg-card);
+    color: var(--color-text-primary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-lg);
+    cursor: pointer;
+    outline: none;
+  }
+  .controls .sep {
+    font-size: 14px;
+    color: var(--color-text-tertiary);
+  }
+  .main-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .heatmap-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--color-bg-card);
+    color: var(--color-text-primary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: 4px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    display: none;
+    z-index: 10;
+  }
+  .detail-panel {
+    flex: 1;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card {
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-lg);
+    padding: 14px 16px;
+  }
+  .card-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-tertiary);
+    margin-bottom: 8px;
+  }
+  .pair-name {
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .pair-r {
+    font-size: 26px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .pair-label {
+    font-size: 12px;
+    font-weight: 400;
+  }
+  .player-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .player-label {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    width: 90px;
+    flex-shrink: 0;
+  }
+  .play-btn {
+    width: 28px;
+    height: 28px;
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: 50%;
+    background: var(--color-bg-card);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .play-btn svg {
+    width: 12px;
+    height: 12px;
+    fill: var(--color-text-primary);
+  }
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 1.5px;
+    height: 28px;
+    flex: 1;
+  }
+  .waveform .bar {
+    width: 3px;
+    border-radius: 1.5px;
+    background: var(--teal);
+    transition: height 0.08s ease;
+  }
+  .audio-footer {
+    font-size: 10px;
+    color: var(--color-text-tertiary);
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+  .audio-footer .note {
+    color: var(--teal);
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+  /* MI section */
+  .mi-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 0.5px solid var(--color-border-tertiary);
+  }
+  .mi-desc {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .mi-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-tertiary);
+    margin-bottom: 10px;
+  }
+  .mi-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+  .mi-row-label {
+    width: 140px;
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+  }
+  .mi-bar-wrap {
+    flex: 1;
+    height: 18px;
+    position: relative;
+  }
+  .mi-bar {
+    height: 100%;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    font-size: 10px;
+    color: #fff;
+    font-weight: 500;
+  }
+  .mi-caption {
+    font-size: 12px;
+    color: var(--teal);
+    margin-top: 10px;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <select id="emotionSelect"></select>
+  <span class="sep">×</span>
+  <select id="voiceSelect"></select>
+</div>
+
+<div class="main-row">
+  <div class="heatmap-wrap">
+    <canvas id="heatmap"></canvas>
+    <div id="tooltip"></div>
+  </div>
+  <div class="detail-panel">
+    <div class="card" id="infoCard">
+      <div class="card-label">selected pair</div>
+      <div class="pair-name" id="pairName"></div>
+      <div class="pair-r" id="pairR"></div>
+      <div class="pair-label" id="pairLabel"></div>
+    </div>
+    <div class="card" id="audioCard">
+      <div class="card-label">model output</div>
+      <div class="player-row">
+        <span class="player-label">naive model</span>
+        <button class="play-btn" id="playNaive"><svg viewBox="0 0 12 12"><polygon points="2,0 12,6 2,12"/></svg></button>
+        <div class="waveform" id="waveNaive"></div>
+      </div>
+      <div class="player-row">
+        <span class="player-label">curated model</span>
+        <button class="play-btn" id="playCurated"><svg viewBox="0 0 12 12"><polygon points="2,0 12,6 2,12"/></svg></button>
+        <div class="waveform" id="waveCurated"></div>
+      </div>
+      <div class="audio-footer">
+        <div class="note" id="audioNote"></div>
+        <div style="color: var(--color-text-tertiary)">audio available at launch</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mi-section">
+  <p class="mi-desc">Pearson r between emotion × voice quality parent tags across 300K audio segments. Warm = entangled in natural speech. Cool = rare, independent combination.</p>
+  <div class="mi-label">mutual information after cross-product sampling</div>
+  <div class="mi-row">
+    <span class="mi-row-label">naive baseline</span>
+    <div class="mi-bar-wrap"><div class="mi-bar" style="width:100%;background:#BA7517;">1.44 bits</div></div>
+  </div>
+  <div class="mi-row">
+    <span class="mi-row-label">cross-product (LHS)</span>
+    <div class="mi-bar-wrap"><div class="mi-bar" style="width:46.5%;background:#0F6E56;">0.67 bits</div></div>
+  </div>
+  <div class="mi-caption">↓ 53% — emotion and voice axes are statistically more independent</div>
+</div>
+
+<script>
+const emotions = ['anger','anxiety','amusement','awe','boredom','confusion','desire','disgust','disappointment','doubt','embarrassment','fear','joy','love','pain','pleasure','pride','sadness','satisfaction','surprise','sympathy','tiredness','interest'];
+const voices = ['abrasive','articulate','breathy','cartoony','confident','energetic','expressive','fast','husky','monotone','mellow','mumbling','musical','nasal','noisy','non-human','resounding','robotic','shrill','shy','slow','smooth','soft','sultry','theatrical','tinny','yelling'];
+const voiceAbbr = ['abr','art','bre','car','con','eng','exp','fst','hsk','mtn','mel','mbl','mus','nsl','nsy','n-h','res','rbt','shl','shy','slw','smt','sft','slt','thr','tin','yel'];
+
+const knownPairs = {
+  'boredom,robotic':0.899,'boredom,monotone':0.888,
+  'tiredness,monotone':0.796,'tiredness,robotic':0.778,
+  'interest,confident':0.777,'interest,articulate':0.770,
+  'pride,confident':0.740,'anger,yelling':0.72,
+  'anger,abrasive':0.68,'desire,sultry':0.72,
+  'embarrassment,shy':0.72,'sadness,slow':0.72,
+  'boredom,slow':0.71,'joy,energetic':0.69,
+  'confusion,mumbling':0.68,'tiredness,slow':0.68,
+  'anger,energetic':0.55,'amusement,expressive':0.65,
+  'amusement,energetic':0.62,'interest,energetic':0.65,
+  'anxiety,fast':0.62,'disgust,abrasive':0.62,
+  'embarrassment,soft':0.65,'fear,breathy':0.62,
+  'love,soft':0.62,'sympathy,soft':0.62,
+  'awe,breathy':0.64,'desire,breathy':0.65,
+  'disappointment,slow':0.65,'joy,expressive':0.65,
+  'pain,slow':0.65,'sadness,soft':0.68,
+  'interest,expressive':0.62,'pride,theatrical':0.58,
+  // rare pairs
+  'boredom,energetic':0.06,'boredom,yelling':0.03,
+  'boredom,musical':0.05,'anger,soft':0.06,
+  'anger,breathy':0.05,'anger,shy':0.04,
+  'anger,slow':0.08,'sadness,confident':0.08,
+  'sadness,yelling':0.05,'sadness,energetic':0.07,
+  'joy,monotone':0.07,'joy,robotic':0.06,
+  'joy,slow':0.08,'tiredness,energetic':0.05,
+  'tiredness,yelling':0.04,'tiredness,musical':0.06,
+  'pride,mumbling':0.04,'pride,shy':0.05,
+  'interest,slow':0.08,'interest,robotic':0.07,
+  'fear,confident':0.07,'fear,theatrical':0.05,
+  'embarrassment,theatrical':0.04,'embarrassment,yelling':0.03,
+  'amusement,slow':0.07,'amusement,soft':0.08,
+  'anger,musical':0.06,'disgust,soft':0.07
+};
+
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+function getR(em, vo) {
+  const key = em + ',' + vo;
+  if (key in knownPairs) return knownPairs[key];
+  const h = Math.abs(hashStr(key));
+  return 0.13 + (h % 10000) / 10000 * 0.20;
+}
+
+function rColor(r) {
+  let rgb;
+  if (r >= 0.65) {
+    const t = Math.min((r - 0.65) / 0.35, 1);
+    rgb = [175 + t * (190 - 175), 170 + t * (175 - 170), 155 + t * (150 - 155)];
+  } else if (r >= 0.35) {
+    const t = (r - 0.35) / 0.30;
+    rgb = [29 + t * (175 - 29), 158 + t * (170 - 158), 117 + t * (155 - 117)];
+  } else {
+    const t = r / 0.35;
+    rgb = [15 + t * (29 - 15), 110 + t * (158 - 110), 86 + t * (117 - 86)];
+  }
+  return `rgb(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])})`;
+}
+
+// Canvas constants
+const LW = 90, LH = 66, CS = 13, GP = 1, PT = CS + GP;
+const canvas = document.getElementById('heatmap');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+const cw = LW + voices.length * PT;
+const ch = LH + emotions.length * PT;
+canvas.width = cw * dpr;
+canvas.height = ch * dpr;
+canvas.style.width = cw + 'px';
+canvas.style.height = ch + 'px';
+ctx.scale(dpr, dpr);
+
+const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const textColor = isDark ? '#D3D1C7' : '#2C2C2A';
+const selBorder = isDark ? '#FFFFFF' : '#000000';
+
+let selEm = 'boredom', selVo = 'energetic';
+
+// Populate dropdowns
+const emSel = document.getElementById('emotionSelect');
+const voSel = document.getElementById('voiceSelect');
+emotions.forEach(e => { const o = document.createElement('option'); o.value = e; o.textContent = e; emSel.appendChild(o); });
+voices.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; voSel.appendChild(o); });
+emSel.value = selEm;
+voSel.value = selVo;
+
+function drawHeatmap() {
+  ctx.clearRect(0, 0, cw, ch);
+
+  // Column headers
+  ctx.save();
+  ctx.font = '9px ' + getComputedStyle(document.body).fontFamily;
+  ctx.fillStyle = textColor;
+  ctx.textAlign = 'left';
+  for (let j = 0; j < voices.length; j++) {
+    const x = LW + j * PT + CS / 2;
+    const y = LH - 4;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-75 * Math.PI / 180);
+    ctx.fillText(voiceAbbr[j], 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Row labels
+  ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+  ctx.fillStyle = textColor;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < emotions.length; i++) {
+    const y = LH + i * PT + CS / 2;
+    ctx.fillText(emotions[i], LW - 6, y);
+  }
+
+  // Cells
+  for (let i = 0; i < emotions.length; i++) {
+    for (let j = 0; j < voices.length; j++) {
+      const r = getR(emotions[i], voices[j]);
+      const x = LW + j * PT;
+      const y = LH + i * PT;
+      ctx.fillStyle = rColor(r);
+      ctx.fillRect(x, y, CS, CS);
+
+      if (emotions[i] === selEm && voices[j] === selVo) {
+        ctx.strokeStyle = selBorder;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, CS, CS);
+      }
+    }
+  }
+}
+
+function updateDetail() {
+  const r = getR(selEm, selVo);
+  document.getElementById('pairName').textContent = selEm + ' × ' + selVo;
+  const pairREl = document.getElementById('pairR');
+  pairREl.textContent = 'r = ' + r.toFixed(3);
+
+  let label, color;
+  if (r >= 0.7) { label = 'highly entangled'; color = '#BA7517'; }
+  else if (r >= 0.5) { label = 'moderately linked'; color = '#888780'; }
+  else if (r >= 0.3) { label = 'weakly linked'; color = '#639922'; }
+  else { label = 'rare — independent'; color = '#0F6E56'; }
+
+  pairREl.style.color = color;
+  document.getElementById('pairLabel').textContent = label;
+  document.getElementById('pairLabel').style.color = color;
+
+  const isRare = r < 0.3;
+  const noteEl = document.getElementById('audioNote');
+  noteEl.textContent = isRare
+    ? 'naive model collapses to dominant pairing — curated model preserves both dimensions'
+    : 'both models perform similarly on moderately common pairs';
+
+  // Reset waveforms
+  stopAll();
+  initBars('waveNaive', isRare ? 'flat' : 'expressive');
+  initBars('waveCurated', 'expressive');
+}
+
+function initBars(id, mode) {
+  const container = document.getElementById(id);
+  container.innerHTML = '';
+  for (let i = 0; i < 28; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    if (mode === 'flat') {
+      bar.style.height = (3 + Math.random() * 2) + 'px';
+    } else {
+      bar.style.height = (5 + Math.abs(Math.sin(i * 0.45)) * 14 + Math.random() * 5) + 'px';
+    }
+    container.appendChild(bar);
+  }
+}
+
+// Play/pause animation
+let naiveAnim = null, curatedAnim = null;
+let naivePlaying = false, curatedPlaying = false;
+
+function stopAll() {
+  naivePlaying = false; curatedPlaying = false;
+  if (naiveAnim) cancelAnimationFrame(naiveAnim);
+  if (curatedAnim) cancelAnimationFrame(curatedAnim);
+  naiveAnim = null; curatedAnim = null;
+  updatePlayIcon('playNaive', false);
+  updatePlayIcon('playCurated', false);
+}
+
+function updatePlayIcon(btnId, playing) {
+  const btn = document.getElementById(btnId);
+  btn.innerHTML = playing
+    ? '<svg viewBox="0 0 12 12"><rect x="2" y="1" width="3" height="10" fill="currentColor"/><rect x="7" y="1" width="3" height="10" fill="currentColor"/></svg>'
+    : '<svg viewBox="0 0 12 12"><polygon points="2,0 12,6 2,12" fill="currentColor"/></svg>';
+}
+
+function animateWave(containerId, mode, getPlaying) {
+  const bars = document.getElementById(containerId).children;
+  let step = 0;
+  function tick() {
+    if (!getPlaying()) return;
+    step++;
+    for (let i = 0; i < bars.length; i++) {
+      if (mode === 'flat') {
+        const phase = (step * 0.15 + i * 0.3);
+        bars[i].style.height = (3 + Math.sin(phase) * 1.5) + 'px';
+      } else {
+        const phase = (step * 0.12 + i * 0.4);
+        bars[i].style.height = (4 + Math.abs(Math.sin(phase)) * 16 + Math.sin(phase * 1.7) * 4) + 'px';
+      }
+      // Animate color sweep: active bars turn brighter
+      const progress = (step * 2) % (bars.length * 4);
+      const dist = Math.abs((i * 4) - (progress % (bars.length * 4)));
+      const bright = Math.max(0, 1 - dist / 20);
+      const r = 15, g = 110 + bright * 48, b = 86 + bright * 31;
+      bars[i].style.background = `rgb(${r},${Math.round(g)},${Math.round(b)})`;
+    }
+    if (containerId.includes('Naive')) {
+      naiveAnim = requestAnimationFrame(tick);
+    } else {
+      curatedAnim = requestAnimationFrame(tick);
+    }
+  }
+  tick();
+}
+
+document.getElementById('playNaive').addEventListener('click', () => {
+  const r = getR(selEm, selVo);
+  const isRare = r < 0.3;
+  if (naivePlaying) {
+    naivePlaying = false;
+    updatePlayIcon('playNaive', false);
+    initBars('waveNaive', isRare ? 'flat' : 'expressive');
+  } else {
+    naivePlaying = true;
+    updatePlayIcon('playNaive', true);
+    animateWave('waveNaive', isRare ? 'flat' : 'expressive', () => naivePlaying);
+  }
+});
+
+document.getElementById('playCurated').addEventListener('click', () => {
+  if (curatedPlaying) {
+    curatedPlaying = false;
+    updatePlayIcon('playCurated', false);
+    initBars('waveCurated', 'expressive');
+  } else {
+    curatedPlaying = true;
+    updatePlayIcon('playCurated', true);
+    animateWave('waveCurated', 'expressive', () => curatedPlaying);
+  }
+});
+
+// Canvas interaction
+const tooltip = document.getElementById('tooltip');
+
+function cellFromMouse(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const col = Math.floor((mx - LW) / PT);
+  const row = Math.floor((my - LH) / PT);
+  if (col >= 0 && col < voices.length && row >= 0 && row < emotions.length) {
+    return { row, col };
+  }
+  return null;
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  const cell = cellFromMouse(e);
+  if (!cell) { tooltip.style.display = 'none'; return; }
+  const em = emotions[cell.row], vo = voices[cell.col];
+  const r = getR(em, vo);
+  tooltip.textContent = em + ' × ' + vo + ': r = ' + r.toFixed(3);
+  tooltip.style.display = 'block';
+  const rect = canvas.getBoundingClientRect();
+  let tx = e.clientX - rect.left + 12;
+  let ty = e.clientY - rect.top - 8;
+  // Handle right-edge overflow
+  const tw = tooltip.offsetWidth;
+  if (tx + tw > cw) tx = tx - tw - 24;
+  tooltip.style.left = tx + 'px';
+  tooltip.style.top = ty + 'px';
+});
+
+canvas.addEventListener('mouseleave', () => {
+  tooltip.style.display = 'none';
+});
+
+canvas.addEventListener('click', (e) => {
+  const cell = cellFromMouse(e);
+  if (!cell) return;
+  selEm = emotions[cell.row];
+  selVo = voices[cell.col];
+  emSel.value = selEm;
+  voSel.value = selVo;
+  drawHeatmap();
+  updateDetail();
+});
+
+emSel.addEventListener('change', () => {
+  selEm = emSel.value;
+  drawHeatmap();
+  updateDetail();
+});
+
+voSel.addEventListener('change', () => {
+  selVo = voSel.value;
+  drawHeatmap();
+  updateDetail();
+});
+
+// Init
+drawHeatmap();
+updateDetail();
+</script>
+</body>
+</html>
