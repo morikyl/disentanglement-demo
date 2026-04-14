@@ -222,9 +222,33 @@
     margin-top: 10px;
     font-weight: 500;
   }
+  .tab-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 14px;
+  }
+  .tab {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 12px;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+  }
+  .tab.active {
+    color: var(--color-text-primary);
+    border-bottom-color: var(--teal);
+  }
 </style>
 </head>
 <body>
+
+<div class="tab-bar">
+  <button class="tab active" data-tab="all">all pairings</button>
+  <button class="tab" data-tab="key">key pairings</button>
+</div>
 
 <div class="controls">
   <select id="emotionSelect"></select>
@@ -279,9 +303,17 @@
 </div>
 
 <script>
-const emotions = ['anger','anxiety','amusement','awe','boredom','confusion','desire','disgust','disappointment','doubt','embarrassment','fear','joy','love','pain','pleasure','pride','sadness','satisfaction','surprise','sympathy','tiredness','interest'];
-const voices = ['abrasive','articulate','breathy','cartoony','confident','energetic','expressive','fast','husky','monotone','mellow','mumbling','musical','nasal','noisy','non-human','resounding','robotic','shrill','shy','slow','smooth','soft','sultry','theatrical','tinny','yelling'];
-const voiceAbbr = ['abr','art','bre','car','con','eng','exp','fst','hsk','mtn','mel','mbl','mus','nsl','nsy','n-h','res','rbt','shl','shy','slw','smt','sft','slt','thr','tin','yel'];
+const allEmotions = ['anger','anxiety','amusement','awe','boredom','confusion','desire','disgust','disappointment','doubt','embarrassment','fear','joy','love','pain','pleasure','pride','sadness','satisfaction','surprise','sympathy','tiredness','interest'];
+const allVoices = ['abrasive','articulate','breathy','cartoony','confident','energetic','expressive','fast','husky','monotone','mellow','mumbling','musical','nasal','noisy','non-human','resounding','robotic','shrill','shy','slow','smooth','soft','sultry','theatrical','tinny','yelling'];
+const allVoiceAbbr = ['abr','art','bre','car','con','eng','exp','fst','hsk','mtn','mel','mbl','mus','nsl','nsy','n-h','res','rbt','shl','shy','slw','smt','sft','slt','thr','tin','yel'];
+
+const keyEmotions = ['anger','boredom','joy','sadness','tiredness','interest','pride','embarrassment'];
+const keyVoices = ['energetic','slow','soft','confident','monotone','yelling','shy','theatrical'];
+
+let emotions = allEmotions;
+let voices = allVoices;
+let voiceAbbr = allVoiceAbbr;
+let activeTab = 'all';
 
 const knownPairs = {
   'boredom,robotic':0.899,'boredom,monotone':0.888,
@@ -348,60 +380,81 @@ function rColor(r) {
   return `rgb(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])})`;
 }
 
-// Canvas constants
-const LW = 90, LH = 66, CS = 13, GP = 1, PT = CS + GP;
+// Canvas state
 const canvas = document.getElementById('heatmap');
 const ctx = canvas.getContext('2d');
 const dpr = window.devicePixelRatio || 1;
-const cw = LW + voices.length * PT;
-const ch = LH + emotions.length * PT;
-canvas.width = cw * dpr;
-canvas.height = ch * dpr;
-canvas.style.width = cw + 'px';
-canvas.style.height = ch + 'px';
-ctx.scale(dpr, dpr);
-
 const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 const textColor = isDark ? '#D3D1C7' : '#2C2C2A';
 const selBorder = isDark ? '#FFFFFF' : '#000000';
+const monoFont = getComputedStyle(document.body).fontFamily;
 
+let LW, LH, CS, GP, PT, cw, ch;
 let selEm = 'boredom', selVo = 'energetic';
 
-// Populate dropdowns
 const emSel = document.getElementById('emotionSelect');
 const voSel = document.getElementById('voiceSelect');
-emotions.forEach(e => { const o = document.createElement('option'); o.value = e; o.textContent = e; emSel.appendChild(o); });
-voices.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; voSel.appendChild(o); });
-emSel.value = selEm;
-voSel.value = selVo;
+
+function setupCanvas() {
+  const isKey = activeTab === 'key';
+  CS = isKey ? 36 : 13;
+  GP = isKey ? 2 : 1;
+  LW = isKey ? 110 : 90;
+  LH = isKey ? 90 : 66;
+  PT = CS + GP;
+  cw = LW + voices.length * PT;
+  ch = LH + emotions.length * PT;
+  canvas.width = cw * dpr;
+  canvas.height = ch * dpr;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+}
+
+function populateDropdowns() {
+  emSel.innerHTML = '';
+  voSel.innerHTML = '';
+  emotions.forEach(e => { const o = document.createElement('option'); o.value = e; o.textContent = e; emSel.appendChild(o); });
+  voices.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; voSel.appendChild(o); });
+  // Ensure selection is valid for current tab
+  if (!emotions.includes(selEm)) selEm = emotions[0];
+  if (!voices.includes(selVo)) selVo = voices[0];
+  emSel.value = selEm;
+  voSel.value = selVo;
+}
 
 function drawHeatmap() {
   ctx.clearRect(0, 0, cw, ch);
+  const isKey = activeTab === 'key';
+  const headerFont = isKey ? '11px ' : '9px ';
+  const rowFont = isKey ? '12px ' : '10px ';
 
   // Column headers
   ctx.save();
-  ctx.font = '9px ' + getComputedStyle(document.body).fontFamily;
+  ctx.font = headerFont + monoFont;
   ctx.fillStyle = textColor;
   ctx.textAlign = 'left';
   for (let j = 0; j < voices.length; j++) {
+    const label = isKey ? voices[j] : voiceAbbr[j];
     const x = LW + j * PT + CS / 2;
-    const y = LH - 4;
+    const y = LH - 6;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(-75 * Math.PI / 180);
-    ctx.fillText(voiceAbbr[j], 0, 0);
+    ctx.fillText(label, 0, 0);
     ctx.restore();
   }
   ctx.restore();
 
   // Row labels
-  ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+  ctx.font = rowFont + monoFont;
   ctx.fillStyle = textColor;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (let i = 0; i < emotions.length; i++) {
     const y = LH + i * PT + CS / 2;
-    ctx.fillText(emotions[i], LW - 6, y);
+    ctx.fillText(emotions[i], LW - 8, y);
   }
 
   // Cells
@@ -411,12 +464,25 @@ function drawHeatmap() {
       const x = LW + j * PT;
       const y = LH + i * PT;
       ctx.fillStyle = rColor(r);
-      ctx.fillRect(x, y, CS, CS);
+      if (isKey) {
+        const rad = 4;
+        ctx.beginPath();
+        ctx.roundRect(x, y, CS, CS, rad);
+        ctx.fill();
+      } else {
+        ctx.fillRect(x, y, CS, CS);
+      }
 
       if (emotions[i] === selEm && voices[j] === selVo) {
         ctx.strokeStyle = selBorder;
         ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, CS, CS);
+        if (isKey) {
+          ctx.beginPath();
+          ctx.roundRect(x, y, CS, CS, 4);
+          ctx.stroke();
+        } else {
+          ctx.strokeRect(x, y, CS, CS);
+        }
       }
     }
   }
@@ -550,7 +616,7 @@ function cellFromMouse(e) {
   const my = e.clientY - rect.top;
   const col = Math.floor((mx - LW) / PT);
   const row = Math.floor((my - LH) / PT);
-  if (col >= 0 && col < voices.length && row >= 0 && row < emotions.length) {
+  if (col >= 0 && col < voices.length && row >= 0 && row < emotions.length && mx >= LW && my >= LH) {
     return { row, col };
   }
   return null;
@@ -600,7 +666,37 @@ voSel.addEventListener('change', () => {
   updateDetail();
 });
 
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const newTab = tab.dataset.tab;
+    if (newTab === activeTab) return;
+    activeTab = newTab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    if (activeTab === 'key') {
+      emotions = keyEmotions;
+      voices = keyVoices;
+      voiceAbbr = keyVoices; // full names for key view
+    } else {
+      emotions = allEmotions;
+      voices = allVoices;
+      voiceAbbr = allVoiceAbbr;
+    }
+
+    selEm = 'boredom';
+    selVo = 'energetic';
+    setupCanvas();
+    populateDropdowns();
+    drawHeatmap();
+    updateDetail();
+  });
+});
+
 // Init
+setupCanvas();
+populateDropdowns();
 drawHeatmap();
 updateDetail();
 </script>
