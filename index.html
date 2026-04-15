@@ -222,6 +222,18 @@
     margin-top: 10px;
     font-weight: 500;
   }
+  .data-pair-label {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--color-text-secondary);
+  }
+  .data-meta {
+    font-size: 10px;
+    color: var(--color-text-tertiary);
+    margin-top: 6px;
+    line-height: 1.5;
+  }
   .tab-bar {
     display: flex;
     gap: 4px;
@@ -284,6 +296,15 @@
         <div class="note" id="audioNote"></div>
         <div style="color: var(--color-text-tertiary)">audio available at launch</div>
       </div>
+    </div>
+    <div class="card" id="dataCard">
+      <div class="card-label">curated training data</div>
+      <div class="data-pair-label" id="dataPairLabel"></div>
+      <div class="player-row">
+        <button class="play-btn" id="playData"><svg viewBox="0 0 12 12"><polygon points="2,0 12,6 2,12"/></svg></button>
+        <div class="waveform" id="waveData"></div>
+      </div>
+      <div class="data-meta" id="dataMeta"></div>
     </div>
   </div>
 </div>
@@ -514,6 +535,15 @@ function updateDetail() {
   stopAll();
   initBars('waveNaive', isRare ? 'flat' : 'expressive');
   initBars('waveCurated', 'expressive');
+
+  // Curated data card
+  document.getElementById('dataPairLabel').textContent = selEm + ' × ' + selVo;
+  initBars('waveData', 'expressive');
+  const segments = isRare ? Math.floor(3 + Math.abs(hashStr(selEm + selVo)) % 8) : Math.floor(40 + Math.abs(hashStr(selEm + selVo)) % 160);
+  const hours = isRare ? (segments * 0.4).toFixed(1) : (segments * 0.3).toFixed(0);
+  document.getElementById('dataMeta').innerHTML = isRare
+    ? '<span style="color:var(--teal)">' + segments + ' segments · ' + hours + ' hrs — cross-product sampling enriched this rare combination</span>'
+    : segments + ' segments · ' + hours + ' hrs — naturally abundant in training data';
 }
 
 function initBars(id, mode) {
@@ -532,16 +562,18 @@ function initBars(id, mode) {
 }
 
 // Play/pause animation
-let naiveAnim = null, curatedAnim = null;
-let naivePlaying = false, curatedPlaying = false;
+let naiveAnim = null, curatedAnim = null, dataAnim = null;
+let naivePlaying = false, curatedPlaying = false, dataPlaying = false;
 
 function stopAll() {
-  naivePlaying = false; curatedPlaying = false;
+  naivePlaying = false; curatedPlaying = false; dataPlaying = false;
   if (naiveAnim) cancelAnimationFrame(naiveAnim);
   if (curatedAnim) cancelAnimationFrame(curatedAnim);
-  naiveAnim = null; curatedAnim = null;
+  if (dataAnim) cancelAnimationFrame(dataAnim);
+  naiveAnim = null; curatedAnim = null; dataAnim = null;
   updatePlayIcon('playNaive', false);
   updatePlayIcon('playCurated', false);
+  updatePlayIcon('playData', false);
 }
 
 function updatePlayIcon(btnId, playing) {
@@ -572,10 +604,12 @@ function animateWave(containerId, mode, getPlaying) {
       const r = 15, g = 110 + bright * 48, b = 86 + bright * 31;
       bars[i].style.background = `rgb(${r},${Math.round(g)},${Math.round(b)})`;
     }
-    if (containerId.includes('Naive')) {
+    if (containerId === 'waveNaive') {
       naiveAnim = requestAnimationFrame(tick);
-    } else {
+    } else if (containerId === 'waveCurated') {
       curatedAnim = requestAnimationFrame(tick);
+    } else {
+      dataAnim = requestAnimationFrame(tick);
     }
   }
   tick();
@@ -604,6 +638,18 @@ document.getElementById('playCurated').addEventListener('click', () => {
     curatedPlaying = true;
     updatePlayIcon('playCurated', true);
     animateWave('waveCurated', 'expressive', () => curatedPlaying);
+  }
+});
+
+document.getElementById('playData').addEventListener('click', () => {
+  if (dataPlaying) {
+    dataPlaying = false;
+    updatePlayIcon('playData', false);
+    initBars('waveData', 'expressive');
+  } else {
+    dataPlaying = true;
+    updatePlayIcon('playData', true);
+    animateWave('waveData', 'expressive', () => dataPlaying);
   }
 });
 
