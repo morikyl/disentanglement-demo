@@ -253,6 +253,99 @@
     color: var(--color-text-primary);
     border-bottom-color: var(--teal);
   }
+  /* Audio samples grid */
+  #samplesView { display: none; }
+  #samplesView.active { display: block; }
+  #heatmapView { display: none; }
+  #heatmapView.active { display: block; }
+  .samples-grid {
+    display: grid;
+    grid-template-columns: 100px repeat(4, 1fr);
+    gap: 2px;
+    margin-bottom: 24px;
+  }
+  .samples-grid .col-header {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-align: center;
+    padding: 8px 4px 10px;
+  }
+  .samples-grid .row-header {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 12px;
+  }
+  .sample-cell {
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-lg);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .sample-cell:hover {
+    background: var(--color-bg-secondary);
+  }
+  .sample-cell.playing {
+    background: var(--color-bg-secondary);
+    border-color: var(--teal);
+  }
+  .sample-cell .sample-play {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 0.5px solid var(--color-border-tertiary);
+    background: var(--color-bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .sample-cell .sample-play svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--color-text-primary);
+  }
+  .sample-cell.playing .sample-play {
+    border-color: var(--teal);
+  }
+  .sample-cell.playing .sample-play svg {
+    fill: var(--teal);
+  }
+  .sample-wave {
+    display: flex;
+    align-items: center;
+    gap: 1.5px;
+    height: 24px;
+    width: 100%;
+    justify-content: center;
+  }
+  .sample-wave .bar {
+    width: 3px;
+    border-radius: 1.5px;
+    background: var(--teal);
+  }
+  .sample-id {
+    font-size: 8px;
+    color: var(--color-text-tertiary);
+    word-break: break-all;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .samples-desc {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
 </style>
 </head>
 <body>
@@ -260,8 +353,10 @@
 <div class="tab-bar">
   <button class="tab active" data-tab="all">all pairings</button>
   <button class="tab" data-tab="key">key pairings</button>
+  <button class="tab" data-tab="samples">audio samples</button>
 </div>
 
+<div id="heatmapView" class="active">
 <div class="controls">
   <select id="emotionSelect"></select>
   <span class="sep">×</span>
@@ -321,6 +416,12 @@
     <div class="mi-bar-wrap"><div class="mi-bar" style="width:46.5%;background:#0F6E56;">0.67 bits</div></div>
   </div>
   <div class="mi-caption">↓ 53% — emotion and voice axes are statistically more independent</div>
+</div>
+</div>
+
+<div id="samplesView">
+  <p class="samples-desc">Curated audio segments mined via cross-product sampling — each clip represents a rare emotion × voice quality combination that naive sampling would miss.</p>
+  <div class="samples-grid" id="samplesGrid"></div>
 </div>
 
 <script>
@@ -712,6 +813,155 @@ voSel.addEventListener('change', () => {
   updateDetail();
 });
 
+// Audio samples data
+const sampleEmotions = ['angry', 'sad', 'bored', 'joy'];
+const sampleVoices = ['monotone', 'whispering', 'yelling', 'theatrical'];
+const sampleIds = {
+  'angry,monotone': '1c7a3d8a-f969-4162-8b72-c66a9cc85843_155',
+  'angry,whispering': '0802fcc6-fd9e-4c48-a197-41e83de9ac0a_673',
+  'angry,yelling': 'fecec8bc-c660-45b3-b58a-ad7635a35bb2_259',
+  'angry,theatrical': 'a37de144-e51b-457b-9fb1-bf536b8bd9ad_1079',
+  'sad,monotone': '5228ff1f-01b9-490f-8995-1daa4124ca7f_006',
+  'sad,whispering': '10c78913-e9b6-44d5-87cb-585fd832d65f_101',
+  'sad,yelling': 'bfc4c817-54df-4667-8a19-d348ee16f944_194',
+  'sad,theatrical': '05785af6-3a5e-4053-ac43-1736594a0092_347',
+  'bored,monotone': 'eb804a27-f31b-4f5e-a3b2-94b3b272ef9a_105',
+  'bored,whispering': '96d703ba-6ac4-4bf2-868b-d8fc7d97b75a_189',
+  'bored,yelling': 'a282c9f0-325e-4d24-867d-0a9651a6853e_766',
+  'bored,theatrical': '0904e1b6-0bf1-4b77-b894-bb0409a64094_046',
+  'joy,monotone': 'a401ea6d-5b2a-42e8-afa2-358c5364f445_000',
+  'joy,whispering': '5ed7dc83-7d66-4e8c-81ca-f727ecc929ff_656',
+  'joy,yelling': '16174c50-2ce7-47aa-8ab2-a3f3253ff295_160',
+  'joy,theatrical': '1a1a438c-8b5c-4e14-a184-cb1d65437bed_133'
+};
+
+let currentSampleAudio = null;
+let currentSampleCell = null;
+let sampleAnimFrame = null;
+
+function buildSamplesGrid() {
+  const grid = document.getElementById('samplesGrid');
+  grid.innerHTML = '';
+
+  // Top-left empty corner
+  const corner = document.createElement('div');
+  grid.appendChild(corner);
+
+  // Column headers
+  sampleVoices.forEach(v => {
+    const h = document.createElement('div');
+    h.className = 'col-header';
+    h.textContent = v;
+    grid.appendChild(h);
+  });
+
+  // Rows
+  sampleEmotions.forEach(em => {
+    // Row header
+    const rh = document.createElement('div');
+    rh.className = 'row-header';
+    rh.textContent = em;
+    grid.appendChild(rh);
+
+    sampleVoices.forEach(vo => {
+      const cell = document.createElement('div');
+      cell.className = 'sample-cell';
+      cell.dataset.emotion = em;
+      cell.dataset.voice = vo;
+
+      const btn = document.createElement('div');
+      btn.className = 'sample-play';
+      btn.innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,0 12,6 3,12"/></svg>';
+      cell.appendChild(btn);
+
+      const wave = document.createElement('div');
+      wave.className = 'sample-wave';
+      for (let i = 0; i < 20; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.height = (3 + Math.abs(Math.sin(i * 0.5)) * 10 + Math.random() * 4) + 'px';
+        wave.appendChild(bar);
+      }
+      cell.appendChild(wave);
+
+      const id = document.createElement('div');
+      id.className = 'sample-id';
+      id.textContent = sampleIds[em + ',' + vo];
+      cell.appendChild(id);
+
+      cell.addEventListener('click', () => playSample(cell, em, vo));
+      grid.appendChild(cell);
+    });
+  });
+}
+
+function playSample(cell, em, vo) {
+  // Stop any playing sample
+  if (currentSampleAudio) {
+    currentSampleAudio.pause();
+    currentSampleAudio.currentTime = 0;
+    currentSampleAudio = null;
+  }
+  if (currentSampleCell) {
+    currentSampleCell.classList.remove('playing');
+    currentSampleCell.querySelector('.sample-play').innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,0 12,6 3,12"/></svg>';
+    // Reset bars
+    const bars = currentSampleCell.querySelectorAll('.sample-wave .bar');
+    bars.forEach((b, i) => {
+      b.style.height = (3 + Math.abs(Math.sin(i * 0.5)) * 10 + Math.random() * 4) + 'px';
+      b.style.background = '';
+    });
+  }
+  if (sampleAnimFrame) cancelAnimationFrame(sampleAnimFrame);
+
+  // If clicking the same cell, just stop
+  if (currentSampleCell === cell) {
+    currentSampleCell = null;
+    return;
+  }
+
+  // Play new
+  cell.classList.add('playing');
+  cell.querySelector('.sample-play').innerHTML = '<svg viewBox="0 0 12 12"><rect x="2" y="1" width="3" height="10" fill="currentColor"/><rect x="7" y="1" width="3" height="10" fill="currentColor"/></svg>';
+  currentSampleCell = cell;
+
+  const audioFile = 'audio/' + em + '_' + vo + '.wav';
+  currentSampleAudio = new Audio(audioFile);
+  currentSampleAudio.play();
+
+  // Animate waveform
+  const bars = cell.querySelectorAll('.sample-wave .bar');
+  let step = 0;
+  function animateSampleBars() {
+    if (!currentSampleAudio || currentSampleAudio.paused) return;
+    step++;
+    for (let i = 0; i < bars.length; i++) {
+      const phase = (step * 0.12 + i * 0.4);
+      bars[i].style.height = (4 + Math.abs(Math.sin(phase)) * 14 + Math.sin(phase * 1.7) * 3) + 'px';
+      const progress = (step * 2) % (bars.length * 4);
+      const dist = Math.abs((i * 4) - (progress % (bars.length * 4)));
+      const bright = Math.max(0, 1 - dist / 16);
+      const g = 110 + bright * 48, b = 86 + bright * 31;
+      bars[i].style.background = `rgb(15,${Math.round(g)},${Math.round(b)})`;
+    }
+    sampleAnimFrame = requestAnimationFrame(animateSampleBars);
+  }
+  animateSampleBars();
+
+  currentSampleAudio.addEventListener('ended', () => {
+    if (currentSampleCell === cell) {
+      cell.classList.remove('playing');
+      cell.querySelector('.sample-play').innerHTML = '<svg viewBox="0 0 12 12"><polygon points="3,0 12,6 3,12"/></svg>';
+      bars.forEach((b, i) => {
+        b.style.height = (3 + Math.abs(Math.sin(i * 0.5)) * 10 + Math.random() * 4) + 'px';
+        b.style.background = '';
+      });
+      currentSampleCell = null;
+      currentSampleAudio = null;
+    }
+  });
+}
+
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -721,10 +971,28 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
 
+    const heatmapView = document.getElementById('heatmapView');
+    const samplesView = document.getElementById('samplesView');
+
+    if (activeTab === 'samples') {
+      heatmapView.classList.remove('active');
+      samplesView.classList.add('active');
+      // Stop any playing sample audio
+      if (currentSampleAudio) { currentSampleAudio.pause(); currentSampleAudio = null; }
+      if (currentSampleCell) { currentSampleCell.classList.remove('playing'); currentSampleCell = null; }
+      return;
+    }
+
+    samplesView.classList.remove('active');
+    heatmapView.classList.add('active');
+    // Stop sample audio when leaving
+    if (currentSampleAudio) { currentSampleAudio.pause(); currentSampleAudio = null; }
+    if (currentSampleCell) { currentSampleCell.classList.remove('playing'); currentSampleCell = null; }
+
     if (activeTab === 'key') {
       emotions = keyEmotions;
       voices = keyVoices;
-      voiceAbbr = keyVoices; // full names for key view
+      voiceAbbr = keyVoices;
     } else {
       emotions = allEmotions;
       voices = allVoices;
@@ -745,6 +1013,7 @@ setupCanvas();
 populateDropdowns();
 drawHeatmap();
 updateDetail();
+buildSamplesGrid();
 </script>
 </body>
 </html>
