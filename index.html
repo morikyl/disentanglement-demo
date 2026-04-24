@@ -375,23 +375,6 @@
       <div class="pair-r" id="pairR"></div>
       <div class="pair-label" id="pairLabel"></div>
     </div>
-    <div class="card" id="audioCard">
-      <div class="card-label">model output</div>
-      <div class="player-row">
-        <span class="player-label">naive model</span>
-        <button class="play-btn" id="playNaive"><svg viewBox="0 0 12 12"><polygon points="2,0 12,6 2,12"/></svg></button>
-        <div class="waveform" id="waveNaive"></div>
-      </div>
-      <div class="player-row">
-        <span class="player-label">curated model</span>
-        <button class="play-btn" id="playCurated"><svg viewBox="0 0 12 12"><polygon points="2,0 12,6 2,12"/></svg></button>
-        <div class="waveform" id="waveCurated"></div>
-      </div>
-      <div class="audio-footer">
-        <div class="note" id="audioNote"></div>
-        <div style="color: var(--color-text-tertiary)">audio available at launch</div>
-      </div>
-    </div>
     <div class="card" id="dataCard">
       <div class="card-label">curated training data</div>
       <div class="data-pair-label" id="dataPairLabel"></div>
@@ -610,6 +593,17 @@ function drawHeatmap() {
   }
 }
 
+// Map grid emotion names to audio file names
+const emotionToFile = { anger: 'angry', sadness: 'sad', boredom: 'bored', joy: 'joy' };
+const audioVoices = ['monotone', 'whispering', 'yelling', 'theatrical'];
+
+function getAudioFile(em, vo) {
+  const fileEm = emotionToFile[em];
+  if (!fileEm) return null;
+  if (!audioVoices.includes(vo)) return null;
+  return 'audio/' + fileEm + '_' + vo + '.wav';
+}
+
 function updateDetail() {
   const r = getR(selEm, selVo);
   document.getElementById('pairName').textContent = selEm + ' × ' + selVo;
@@ -626,25 +620,31 @@ function updateDetail() {
   document.getElementById('pairLabel').textContent = label;
   document.getElementById('pairLabel').style.color = color;
 
-  const isRare = r < 0.3;
-  const noteEl = document.getElementById('audioNote');
-  noteEl.textContent = isRare
-    ? 'naive model collapses to dominant pairing — curated model preserves both dimensions'
-    : 'both models perform similarly on moderately common pairs';
-
-  // Reset waveforms
+  // Reset waveforms & audio
   stopAll();
-  initBars('waveNaive', isRare ? 'flat' : 'expressive');
-  initBars('waveCurated', 'expressive');
 
   // Curated data card
   document.getElementById('dataPairLabel').textContent = selEm + ' × ' + selVo;
   initBars('waveData', 'expressive');
+
+  const audioFile = getAudioFile(selEm, selVo);
+  const isRare = r < 0.3;
   const segments = isRare ? Math.floor(3 + Math.abs(hashStr(selEm + selVo)) % 8) : Math.floor(40 + Math.abs(hashStr(selEm + selVo)) % 160);
   const hours = isRare ? (segments * 0.4).toFixed(1) : (segments * 0.3).toFixed(0);
-  document.getElementById('dataMeta').innerHTML = isRare
-    ? '<span style="color:var(--teal)">' + segments + ' segments · ' + hours + ' hrs — cross-product sampling enriched this rare combination</span>'
-    : segments + ' segments · ' + hours + ' hrs — naturally abundant in training data';
+
+  const metaEl = document.getElementById('dataMeta');
+  if (audioFile) {
+    metaEl.innerHTML = isRare
+      ? '<span style="color:var(--teal)">' + segments + ' segments · ' + hours + ' hrs — cross-product sampling enriched this rare combination</span>'
+      : segments + ' segments · ' + hours + ' hrs — naturally abundant in training data';
+  } else {
+    metaEl.innerHTML = isRare
+      ? '<span style="color:var(--teal)">' + segments + ' segments · ' + hours + ' hrs — cross-product sampling enriched this rare combination</span>'
+      : segments + ' segments · ' + hours + ' hrs — naturally abundant in training data';
+  }
+
+  // Store current audio file for the play button
+  document.getElementById('playData').dataset.audioFile = audioFile || '';
 }
 
 function initBars(id, mode) {
@@ -663,17 +663,15 @@ function initBars(id, mode) {
 }
 
 // Play/pause animation
-let naiveAnim = null, curatedAnim = null, dataAnim = null;
-let naivePlaying = false, curatedPlaying = false, dataPlaying = false;
+let dataAnim = null;
+let dataPlaying = false;
+let dataAudio = null;
 
 function stopAll() {
-  naivePlaying = false; curatedPlaying = false; dataPlaying = false;
-  if (naiveAnim) cancelAnimationFrame(naiveAnim);
-  if (curatedAnim) cancelAnimationFrame(curatedAnim);
+  dataPlaying = false;
   if (dataAnim) cancelAnimationFrame(dataAnim);
-  naiveAnim = null; curatedAnim = null; dataAnim = null;
-  updatePlayIcon('playNaive', false);
-  updatePlayIcon('playCurated', false);
+  dataAnim = null;
+  if (dataAudio) { dataAudio.pause(); dataAudio.currentTime = 0; dataAudio = null; }
   updatePlayIcon('playData', false);
 }
 
@@ -705,52 +703,30 @@ function animateWave(containerId, mode, getPlaying) {
       const r = 15, g = 110 + bright * 48, b = 86 + bright * 31;
       bars[i].style.background = `rgb(${r},${Math.round(g)},${Math.round(b)})`;
     }
-    if (containerId === 'waveNaive') {
-      naiveAnim = requestAnimationFrame(tick);
-    } else if (containerId === 'waveCurated') {
-      curatedAnim = requestAnimationFrame(tick);
-    } else {
-      dataAnim = requestAnimationFrame(tick);
-    }
+    dataAnim = requestAnimationFrame(tick);
   }
   tick();
 }
 
-document.getElementById('playNaive').addEventListener('click', () => {
-  const r = getR(selEm, selVo);
-  const isRare = r < 0.3;
-  if (naivePlaying) {
-    naivePlaying = false;
-    updatePlayIcon('playNaive', false);
-    initBars('waveNaive', isRare ? 'flat' : 'expressive');
-  } else {
-    naivePlaying = true;
-    updatePlayIcon('playNaive', true);
-    animateWave('waveNaive', isRare ? 'flat' : 'expressive', () => naivePlaying);
-  }
-});
-
-document.getElementById('playCurated').addEventListener('click', () => {
-  if (curatedPlaying) {
-    curatedPlaying = false;
-    updatePlayIcon('playCurated', false);
-    initBars('waveCurated', 'expressive');
-  } else {
-    curatedPlaying = true;
-    updatePlayIcon('playCurated', true);
-    animateWave('waveCurated', 'expressive', () => curatedPlaying);
-  }
-});
-
 document.getElementById('playData').addEventListener('click', () => {
   if (dataPlaying) {
-    dataPlaying = false;
-    updatePlayIcon('playData', false);
+    stopAll();
     initBars('waveData', 'expressive');
-  } else {
-    dataPlaying = true;
-    updatePlayIcon('playData', true);
-    animateWave('waveData', 'expressive', () => dataPlaying);
+    return;
+  }
+
+  const audioFile = document.getElementById('playData').dataset.audioFile;
+  dataPlaying = true;
+  updatePlayIcon('playData', true);
+  animateWave('waveData', 'expressive', () => dataPlaying);
+
+  if (audioFile) {
+    dataAudio = new Audio(audioFile);
+    dataAudio.play();
+    dataAudio.addEventListener('ended', () => {
+      stopAll();
+      initBars('waveData', 'expressive');
+    });
   }
 });
 
